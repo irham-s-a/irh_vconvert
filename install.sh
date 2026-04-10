@@ -7,7 +7,7 @@ mkdir -p /sdcard/irh_vconvert/input
 mkdir -p /sdcard/irh_vconvert/output
 
 # Pasang command ke PATH
-cp irh_vconvert.sh $PREFIX/bin/irh_vconvert
+cp irh_vconvert.sh $PREFIX/bin/irh-vconvert
 chmod +x $PREFIX/bin/irh-vconvert
 
 echo "[✓] Install selesai"
