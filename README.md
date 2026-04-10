@@ -1,11 +1,9 @@
 
 # 🎬 irh_vconvert
 
-Tool convert video berbasis Termux dengan UI Whiptail, dilengkapi deteksi perangkat keras dan koreksi ukuran file otomatis.
-
----
-
 ## 🇮🇩 Bahasa Indonesia
+
+Tool convert video berbasis Termux dengan UI Whiptail, dilengkapi deteksi perangkat keras dan koreksi ukuran file otomatis.
 
 ### ⚙️ Fitur Lengkap
 
@@ -80,8 +78,8 @@ bash irh_vconvert.sh
 2. Jalankan script
       Pilih menu Convert Video.
 3. Pilih mode
-   · CRF Quality → masukkan nilai CRF (18–28 direkomendasikan, default 23).
-   · Size Target → masukkan ukuran target dalam MB (contoh: 50). Script akan mencoba mencapai ukuran ≥ target dengan kelebihan maksimal 0.5 MB.
+      · CRF Quality → masukkan nilai CRF (18–28 direkomendasikan, default 23).
+      · Size Target → masukkan ukuran target dalam MB (contoh: 50). Script akan mencoba mencapai ukuran ≥ target dengan kelebihan maksimal 0.5 MB.
 4. Pilih codec, FPS, resolusi sesuai kebutuhan.
 5. Tunggu proses selesai
 
@@ -93,7 +91,7 @@ File hasil konversi akan berada di:
 /sdcard/irh_vconvert/output/
 ```
 
-Nama file: conv_<nama asli>
+Nama file: conv_(nama asli)
 
 ⚠️ Catatan
 
@@ -113,6 +111,8 @@ Nama file: conv_<nama asli>
 ---
 
 🇬🇧 English
+
+A Termux-based video conversion tool with Whiptail UI, equipped with hardware detection and automatic file size correction.
 
 ⚙️ Full Features
 
@@ -184,8 +184,8 @@ bash irh_vconvert.sh
 2. Run script
       Select Convert Video menu.
 3. Choose mode
-   · CRF Quality → enter CRF value (18–28 recommended, default 23).
-   · Size Target → enter target size in MB (e.g., 50). Script will try to reach size ≥ target with max overshoot 0.5 MB.
+      · CRF Quality → enter CRF value (18–28 recommended, default 23).
+      · Size Target → enter target size in MB (e.g., 50). Script will try to reach size ≥ target with max overshoot 0.5 MB.
 4. Select codec, FPS, resolution as needed.
 5. Wait until finished
 
@@ -197,7 +197,7 @@ Converted files will be in:
 /sdcard/irh_vconvert/output/
 ```
 
-Filename: conv_<original name>
+Filename: conv_(original name)
 
 ⚠️ Notes
 
