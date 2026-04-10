@@ -1,5 +1,8 @@
 #!/data/data/com.termux/files/usr/bin/bash
 
+# Matikan history expansion (biar tanda ! tidak error)
+set +H
+
 # =========================
 # 1. WHIPTAIL CHECK
 # =========================
@@ -30,6 +33,24 @@ check_dep() {
 check_dep ffmpeg ffmpeg
 check_dep ffprobe ffmpeg
 check_dep bc bc
+check_dep mediainfo mediainfo
+
+# =========================
+# 2.5. CEK FFMPEG LINKING ERROR (libbluray.so.3 dll)
+# =========================
+check_ffmpeg_works() {
+  ffmpeg -version >/dev/null 2>&1
+  return $?
+}
+
+if ! check_ffmpeg_works; then
+  whiptail --msgbox "⚠️ FFmpeg error: library missing\nMencoba perbaikan..." 10 50
+  pkg reinstall libbluray ffmpeg -y
+  if ! check_ffmpeg_works; then
+    whiptail --msgbox "❌ Gagal. Jalankan manual:\npkg reinstall libbluray ffmpeg" 12 50
+    exit 1
+  fi
+fi
 
 # =========================
 # 3. DEVICE SPECS DETECTION
@@ -63,12 +84,7 @@ CPU        : ${CPU_NAME:-UNKNOWN}
 STATUS     : $LEVEL
 
 ========================
-RULE SYSTEM
-========================
-LOW    → BLOCK (tidak bisa lanjut)
-MEDIUM → WARNING (boleh lanjut)
-HIGH   → NORMAL
-========================
+
 " 22 60
 
 # =========================
@@ -114,10 +130,65 @@ OUT="$BASE/output"
 mkdir -p "$IN" "$OUT"
 
 # =========================
-# FIX VARIABLES
+# FIX VARIABLES (default)
 # =========================
-SIZE_MB=100
-CRF=23
+CRF_DEFAULT=23
+
+# =========================
+# FUNGSI GET DURATION (dengan notifikasi CLI ke stderr)
+# =========================
+get_duration() {
+  local file="$1"
+  local dur
+
+  # Metode 1: ffprobe
+  dur=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$file" 2>/dev/null)
+  if [[ -n "$dur" && "$dur" != "N/A" && "$dur" =~ ^[0-9]+\.?[0-9]*$ ]]; then
+    echo "$dur"
+    return 0
+  fi
+
+  # Metode 2: mediainfo
+  if command -v mediainfo >/dev/null 2>&1; then
+    dur_ms=$(mediainfo --Inform="General;%Duration%" "$file" 2>/dev/null)
+    if [[ -n "$dur_ms" && "$dur_ms" =~ ^[0-9]+$ ]]; then
+      dur=$(echo "scale=3; $dur_ms / 1000" | bc -l 2>/dev/null)
+      if [[ -n "$dur" && "$dur" != "0" ]]; then
+        echo "$dur"
+        return 0
+      fi
+    fi
+  fi
+
+  # Metode 3: decode penuh (lambat) dengan notifikasi di CLI (stderr)
+  echo "" >&2
+  echo "==============================================" >&2
+  echo "⏳ MEMBACA DURASI FILE (DECODE)" >&2
+  echo "   File: $(basename "$file")" >&2
+  echo "   Proses ini lambat, harap tunggu..." >&2
+  echo "   Metode decode digunakan karena metadata durasi" >&2
+  echo "   tidak tersedia (umum pada video hasil editing HP)." >&2
+  echo "==============================================" >&2
+  
+  local tmp_log=$(mktemp)
+  ffmpeg -i "$file" -f null - 2> "$tmp_log"
+  dur=$(grep -oP 'time=\K[0-9:.]+' "$tmp_log" | tail -n1)
+  rm -f "$tmp_log"
+  
+  if [[ -n "$dur" ]]; then
+    IFS=: read -r h m s <<< "$dur"
+    s=${s%.*}
+    echo "   ✓ Durasi terbaca: $dur detik" >&2
+    echo "==============================================" >&2
+    echo "$((10#$h * 3600 + 10#$m * 60 + 10#$s))"
+    return 0
+  fi
+
+  echo "   ✗ Gagal membaca durasi (decode gagal)" >&2
+  echo "==============================================" >&2
+  echo "" >&2
+  return 1
+}
 
 # =========================
 # 8. MAIN MENU
@@ -234,9 +305,40 @@ Lanjut?" 15 60 || continue
 fi
 
 # =========================
-# 14. PROCESS FILES
+# 14. INPUT CRF (jika mode CRF) ATAU INPUT SIZE (jika mode Size Target)
 # =========================
-# Cek apakah ada file di input
+CRF=$CRF_DEFAULT
+SIZE_MB=100
+
+if [ "$MODE" = "1" ]; then
+  # Mode CRF: minta nilai CRF
+  CRF_INPUT=$(whiptail --inputbox "Masukkan nilai CRF (Constant Rate Factor)\n\nSemakin kecil = kualitas lebih baik (18-28)\nDefault 23 (direkomendasikan)" 12 60 "$CRF_DEFAULT" 3>&1 1>&2 2>&3)
+  if [ $? -eq 0 ] && [ -n "$CRF_INPUT" ]; then
+    if [[ "$CRF_INPUT" =~ ^[0-9]+$ ]] && [ "$CRF_INPUT" -ge 0 ] && [ "$CRF_INPUT" -le 51 ]; then
+      CRF=$CRF_INPUT
+    else
+      whiptail --msgbox "❌ Nilai CRF harus angka antara 0-51. Gunakan default 23." 10 50
+    fi
+  fi
+else
+  # Mode Size Target: minta ukuran MB
+  SIZE_MB_INPUT=$(whiptail --inputbox "Masukkan ukuran target (MB)\nDefault 100 MB" 10 50 "100" 3>&1 1>&2 2>&3)
+  if [ $? -ne 0 ] || [ -z "$SIZE_MB_INPUT" ]; then
+    SIZE_MB=100
+    whiptail --msgbox "Menggunakan ukuran default: 100 MB" 10 50
+  else
+    if [[ "$SIZE_MB_INPUT" =~ ^[0-9]+$ ]] && [ "$SIZE_MB_INPUT" -ge 1 ]; then
+      SIZE_MB=$SIZE_MB_INPUT
+    else
+      whiptail --msgbox "❌ Input tidak valid. Gunakan default 100 MB." 10 50
+      SIZE_MB=100
+    fi
+  fi
+fi
+
+# =========================
+# 15. CEK FILE INPUT
+# =========================
 shopt -s nullglob
 files=("$IN"/*)
 if [ ${#files[@]} -eq 0 ]; then
@@ -244,24 +346,30 @@ if [ ${#files[@]} -eq 0 ]; then
   continue
 fi
 
+# =========================
+# 16. PROSES KONVERSI
+# =========================
 for file in "$IN"/*; do
   [ -e "$file" ] || continue
 
   name=$(basename "$file")
   out="$OUT/conv_$name"
-
   FPS_VAL=$([ "$FPS" = "ori" ] && echo 30 || echo $FPS)
 
-  # =========================
-  # MODE 1 - SIZE TARGET (DIPERBAIKI)
-  # =========================
-  if [ "$MODE" = "2" ]; then   # <--- PERHATIAN: di menu, "2" adalah Size Target
-
-    duration=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$file")
-
-    # Validasi durasi lebih ketat
-    if [[ -z "$duration" || "$duration" = "N/A" || ! "$duration" =~ ^[0-9]+\.?[0-9]*$ ]]; then
-      whiptail --msgbox "❌ ERROR: durasi tidak terbaca untuk file $name" 10 55
+  if [ "$MODE" = "2" ]; then
+    # Mode Size Target: butuh durasi, tampilkan notifikasi umum sebelum ambil durasi
+    echo ""
+    echo "==============================================" >&2
+    echo "📹 SEDANG MEMERIKSA INFORMASI VIDEO" >&2
+    echo "   File: $name" >&2
+    echo "   Mengambil durasi untuk perhitungan ukuran target..." >&2
+    echo "   Jika metadata tidak tersedia, proses bisa memakan waktu lama." >&2
+    echo "   Harap tunggu..." >&2
+    echo "==============================================" >&2
+    
+    duration=$(get_duration "$file")
+    if [[ -z "$duration" || "$duration" = "0" ]]; then
+      whiptail --msgbox "❌ ERROR: durasi tidak terbaca untuk file $name (ffprobe & mediainfo & decode gagal)" 12 55
       continue
     fi
 
@@ -271,22 +379,19 @@ for file in "$IN"/*; do
     safety=0.95
 
     video_bytes=$(echo "($target_bytes - $audio_bytes) * $safety" | bc -l)
-    # Hitung bitrate video dalam kbps (pembulatan ke atas)
     vbit=$(echo "scale=0; ($video_bytes * 8) / ($duration * 1000) + 0.5" | bc -l 2>/dev/null)
 
-    # Jika hasil kosong atau 0, pakai default 300
-    if [[ -z "$vbit" || "$vbit" -le 0 ]]; then
+    if [[ -z "$vbit" ]] || (( $(echo "$vbit <= 0" | bc -l) )); then
       vbit=300
     fi
 
-    # Batasi minimal 120 kbps, maksimal 5000 kbps
-    if [ "$vbit" -lt 120 ]; then
+    if (( $(echo "$vbit < 120" | bc -l) )); then
       vbit=120
-    elif [ "$vbit" -gt 5000 ]; then
+    elif (( $(echo "$vbit > 5000" | bc -l) )); then
       vbit=5000
     fi
 
-    # Two-pass encoding dengan H.264 (stabil untuk mode size)
+    # Two-pass encoding dengan H.264
     ffmpeg -y -loglevel error -i "$file" -r "$FPS_VAL" $SCALE \
       -c:v libx264 -b:v ${vbit}k -pass 1 -an -f null /dev/null
 
@@ -294,11 +399,15 @@ for file in "$IN"/*; do
       -c:v libx264 -b:v ${vbit}k -pass 2 \
       -c:a aac -b:a ${audio_kbps}k "$out"
 
-    # Bersihkan file sementara two-pass
     rm -f ffmpeg2pass-0.log ffmpeg2pass-0.log.mbtree
 
+    if [ ! -f "$out" ]; then
+      whiptail --msgbox "❌ GAGAL mengkonversi $name\nCek apakah file video rusak atau codec tidak didukung." 12 55
+      continue
+    fi
+
   else
-    # MODE CRF Quality
+    # Mode CRF Quality
     if [ "$CODEC" = "265" ]; then
       ffmpeg -y -i "$file" -r "$FPS_VAL" $SCALE \
         -c:v libx265 -crf $CRF \
@@ -307,6 +416,11 @@ for file in "$IN"/*; do
       ffmpeg -y -i "$file" -r "$FPS_VAL" $SCALE \
         -c:v libx264 -crf $CRF \
         -c:a aac -b:a 128k "$out"
+    fi
+
+    if [ ! -f "$out" ]; then
+      whiptail --msgbox "❌ GAGAL mengkonversi $name\nCek apakah file video rusak atau codec tidak didukung." 12 55
+      continue
     fi
   fi
 
