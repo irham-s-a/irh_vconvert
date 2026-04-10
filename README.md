@@ -1,3 +1,4 @@
+
 # 🎬 irh_vconvert
 
 Tool convert video berbasis Termux menggunakan FFmpeg + Whiptail UI.
@@ -21,40 +22,48 @@ Tool convert video berbasis Termux menggunakan FFmpeg + Whiptail UI.
 
 ## 📁 Struktur Folder
 
-/ sdcard / irh_vconvert /
-- input   (taruh video di sini)
-- output  (hasil convert)
+```
+/sdcard/irh_vconvert/
+├── input   (taruh video di sini)
+└── output  (hasil convert)
+```
 
 ---
 
 ## 📲 Cara Install
 
-### 1. Clone repo
-bash
-git clone https://github.com/USERNAME/irh_vconvert.git
+1. Clone repo:
+```bash
+git clone https://github.com/irham-s-a/irh_vconvert.git
 cd irh_vconvert
+```
 
-### 2. Install script
-bash
+2. Install script:
+```bash
 bash install.sh
+```
 
 ---
 
 ## ▶️ Cara Pakai
 
-bash
+```bash
 irh_vconvert
+```
 
 ---
 
 ## 📥 Cara penggunaan
 
 1. Taruh video ke:
+```
 /sdcard/irh_vconvert/input
+```
 
 2. Jalankan script:
-bash
+```
 irh_vconvert
+```
 
 3. Pilih menu:
 - Convert by Size
@@ -67,7 +76,9 @@ irh_vconvert
 ## 📤 Hasil
 
 File hasil akan masuk ke:
+```
 /sdcard/irh_vconvert/output
+```
 
 ---
 
