@@ -135,7 +135,7 @@ mkdir -p "$IN" "$OUT"
 CRF_DEFAULT=23
 
 # =========================
-# FUNGSI GET DURATION (dengan notifikasi CLI ke stderr)
+# FUNGSI GET DURATION (dengan notifikasi CLI ke stderr, dan </dev/null)
 # =========================
 get_duration() {
   local file="$1"
@@ -160,7 +160,7 @@ get_duration() {
     fi
   fi
 
-  # Metode 3: decode penuh (lambat) dengan notifikasi di CLI (stderr)
+  # Metode 3: decode penuh (lambat) dengan notifikasi di CLI (stderr), stdin ditutup
   echo "" >&2
   echo "==============================================" >&2
   echo "⏳ MEMBACA DURASI FILE (DECODE)" >&2
@@ -171,7 +171,7 @@ get_duration() {
   echo "==============================================" >&2
   
   local tmp_log=$(mktemp)
-  ffmpeg -i "$file" -f null - 2> "$tmp_log"
+  ffmpeg -i "$file" -f null - < /dev/null 2> "$tmp_log"
   dur=$(grep -oP 'time=\K[0-9:.]+' "$tmp_log" | tail -n1)
   rm -f "$tmp_log"
   
@@ -214,7 +214,7 @@ OUTPUT: $OUT
 
 case $MENU in
 0)
-  exit
+  exit 0
 ;;
 
 2)
@@ -351,7 +351,11 @@ for file in "$IN"/*; do
   FPS_VAL=$([ "$FPS" = "ori" ] && echo 30 || echo $FPS)
 
   if [ "$MODE" = "2" ]; then
-    # Mode Size Target: butuh durasi, tampilkan notifikasi umum sebelum ambil durasi
+    # ==========================================================
+    # MODE SIZE TARGET DENGAN ITERASI KOREKSI OTOMATIS
+    # Safety awal 1.05 -> cenderung lebih dulu
+    # HASIL AKHIR: ukuran >= target DAN selisih lebih ≤ 0.5 MB
+    # ==========================================================
     echo ""
     echo "==============================================" >&2
     echo "📹 SEDANG MEMERIKSA INFORMASI VIDEO" >&2
@@ -370,46 +374,106 @@ for file in "$IN"/*; do
     target_bytes=$(echo "$SIZE_MB * 1024 * 1024" | bc -l)
     audio_kbps=128
     audio_bytes=$(echo "$audio_kbps * 1000 * $duration / 8" | bc -l)
-    safety=0.95
+    safety=1.05   # lebih dulu
 
-    video_bytes=$(echo "($target_bytes - $audio_bytes) * $safety" | bc -l)
-    vbit=$(echo "scale=0; ($video_bytes * 8) / ($duration * 1000) + 0.5" | bc -l 2>/dev/null)
+    max_iter=5
+    iter=1
+    tolerance=0.5
+    converged=false
+    actual_size_mb=0
+    current_vbit=0
 
-    if [[ -z "$vbit" ]] || (( $(echo "$vbit <= 0" | bc -l) )); then
-      vbit=300
-    fi
-
-    if (( $(echo "$vbit < 120" | bc -l) )); then
-      vbit=120
-    elif (( $(echo "$vbit > 5000" | bc -l) )); then
-      vbit=5000
-    fi
-
-    # Two-pass encoding dengan H.264
-    ffmpeg -y -loglevel error -i "$file" -r "$FPS_VAL" $SCALE \
-      -c:v libx264 -b:v ${vbit}k -pass 1 -an -f null /dev/null
-
-    ffmpeg -y -i "$file" -r "$FPS_VAL" $SCALE \
-      -c:v libx264 -b:v ${vbit}k -pass 2 \
-      -c:a aac -b:a ${audio_kbps}k "$out"
-
-    rm -f ffmpeg2pass-0.log ffmpeg2pass-0.log.mbtree
-
-    if [ ! -f "$out" ]; then
-      whiptail --msgbox "❌ GAGAL mengkonversi $name\nCek apakah file video rusak atau codec tidak didukung." 12 55
-      continue
+    while [ $iter -le $max_iter ] && [ "$converged" = false ]; do
+      video_bytes=$(echo "($target_bytes - $audio_bytes) * $safety" | bc -l)
+      vbit=$(echo "scale=0; ($video_bytes * 8) / ($duration * 1000) + 0.5" | bc -l 2>/dev/null)
+      
+      if [[ -z "$vbit" ]] || (( $(echo "$vbit <= 0" | bc -l) )); then
+        vbit=300
+      fi
+      if (( $(echo "$vbit < 120" | bc -l) )); then
+        vbit=120
+      elif (( $(echo "$vbit > 5000" | bc -l) )); then
+        vbit=5000
+      fi
+      
+      current_vbit=$vbit
+      
+      echo "" >&2
+      echo "--------------------------------------------------" >&2
+      echo "🔄 ITERASI KE-$iter" >&2
+      echo "   Target size: $SIZE_MB MB" >&2
+      echo "   Toleransi lebih: max $tolerance MB" >&2
+      echo "   Menggunakan bitrate video: ${vbit} kbps" >&2
+      echo "   Safety factor: $safety" >&2
+      echo "   Memulai two-pass encoding..." >&2
+      echo "   Membutuhkan waktu sedikit lama..." >&2
+      echo "   Mohon tunggu...." >&2
+      echo "--------------------------------------------------" >&2
+      
+      # Two-pass dengan stdin ditutup
+      ffmpeg -y -loglevel error -i "$file" -r "$FPS_VAL" $SCALE \
+        -c:v libx264 -b:v ${vbit}k -pass 1 -an -f null /dev/null < /dev/null
+      
+      ffmpeg -y -i "$file" -r "$FPS_VAL" $SCALE \
+        -c:v libx264 -b:v ${vbit}k -pass 2 \
+        -c:a aac -b:a ${audio_kbps}k "$out" < /dev/null
+      
+      rm -f ffmpeg2pass-0.log ffmpeg2pass-0.log.mbtree
+      
+      if [ ! -f "$out" ]; then
+        whiptail --msgbox "❌ GAGAL mengkonversi $name pada iterasi ke-$iter" 12 55
+        break 2
+      fi
+      
+      actual_bytes=$(stat -c %s "$out" 2>/dev/null || du -b "$out" | cut -f1)
+      if [ -z "$actual_bytes" ]; then
+        whiptail --msgbox "❌ Tidak bisa membaca ukuran file hasil untuk $name" 12 55
+        break 2
+      fi
+      actual_size_mb=$(echo "scale=2; $actual_bytes / 1024 / 1024" | bc -l)
+      
+      diff=$(echo "$actual_size_mb - $SIZE_MB" | bc -l)
+      
+      echo "   Ukuran aktual: ${actual_size_mb} MB" >&2
+      echo "   Target : ${SIZE_MB} MB" >&2
+      echo "   Selisih: ${diff} MB (positif = lebih)" >&2
+      
+      if (( $(echo "$diff >= 0" | bc -l) )) && (( $(echo "$diff <= $tolerance" | bc -l) )); then
+        echo "   ✅ Ukuran memenuhi kriteria (tidak kurang dan kelebihan ≤ 0.5 MB)." >&2
+        converged=true
+        break
+      fi
+      
+      if [ $iter -lt $max_iter ]; then
+        ratio=$(echo "$SIZE_MB / $actual_size_mb" | bc -l)
+        new_safety=$(echo "$safety * $ratio" | bc -l)
+        if (( $(echo "$new_safety < 0.7" | bc -l) )); then
+          new_safety=0.7
+        elif (( $(echo "$new_safety > 1.8" | bc -l) )); then
+          new_safety=1.8
+        fi
+        safety=$new_safety
+        echo "   📊 Menyesuaikan safety factor menjadi: $safety" >&2
+      fi
+      
+      ((iter++))
+    done
+    
+    if [ "$converged" = false ]; then
+      echo "   ⚠ Mencapai batas iterasi ($max_iter). Ukuran akhir: ${actual_size_mb} MB (target ${SIZE_MB} MB)" >&2
+      whiptail --msgbox "⚠ Konversi selesai dengan ukuran ${actual_size_mb} MB (target ${SIZE_MB} MB)\nSelisih lebih: $(echo "$actual_size_mb - $SIZE_MB" | bc -l) MB (melebihi toleransi 0.5 MB atau masih kurang)." 12 60
     fi
 
   else
-    # Mode CRF Quality
+    # MODE CRF Quality
     if [ "$CODEC" = "265" ]; then
       ffmpeg -y -i "$file" -r "$FPS_VAL" $SCALE \
         -c:v libx265 -crf $CRF \
-        -c:a aac -b:a 128k "$out"
+        -c:a aac -b:a 128k "$out" < /dev/null
     else
       ffmpeg -y -i "$file" -r "$FPS_VAL" $SCALE \
         -c:v libx264 -crf $CRF \
-        -c:a aac -b:a 128k "$out"
+        -c:a aac -b:a 128k "$out" < /dev/null
     fi
 
     if [ ! -f "$out" ]; then
