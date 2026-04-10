@@ -251,6 +251,12 @@ for file in "$IN"/*; do
 
     duration=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$file")
 
+    # ===== PATCH FIX 1 =====
+    if [ -z "$duration" ] || [ "$duration" = "N/A" ]; then
+      whiptail --msgbox "❌ ERROR: durasi tidak terbaca" 10 50
+      continue
+    fi
+
     target_bytes=$(echo "$SIZE_MB * 1024 * 1024" | bc)
 
     audio_kbps=128
@@ -263,10 +269,17 @@ for file in "$IN"/*; do
 
     vbit=$(echo "($video_bytes * 8) / $duration / 1000" | bc)
 
-    [ "$vbit" -lt 120 ] && vbit=120
+    # ===== PATCH FIX 2 =====
+    if [ -z "$vbit" ]; then
+      vbit=300
+    fi
 
-    ffmpeg -y -i "$file" -r $FPS_VAL $SCALE \
-      -c:v libx264 -b:v ${vbit}k -pass 1 -an -f mp4 /dev/null
+    if [ "$vbit" -lt 120 ] 2>/dev/null; then
+      vbit=120
+    fi
+
+    ffmpeg -y -loglevel error -i "$file" -r $FPS_VAL $SCALE \
+      -c:v libx264 -b:v ${vbit}k -pass 1 -an -f null /dev/null
 
     ffmpeg -y -i "$file" -r $FPS_VAL $SCALE \
       -c:v libx264 -b:v ${vbit}k -pass 2 \
