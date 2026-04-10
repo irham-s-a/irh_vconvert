@@ -236,6 +236,14 @@ fi
 # =========================
 # 14. PROCESS FILES
 # =========================
+# Cek apakah ada file di input
+shopt -s nullglob
+files=("$IN"/*)
+if [ ${#files[@]} -eq 0 ]; then
+  whiptail --msgbox "❌ Tidak ada file di folder input!\nLetakkan video di:\n$IN" 12 55
+  continue
+fi
+
 for file in "$IN"/*; do
   [ -e "$file" ] || continue
 
@@ -245,58 +253,61 @@ for file in "$IN"/*; do
   FPS_VAL=$([ "$FPS" = "ori" ] && echo 30 || echo $FPS)
 
   # =========================
-  # MODE 1 - SIZE LOCK FIXED
+  # MODE 1 - SIZE TARGET (DIPERBAIKI)
   # =========================
-  if [ "$MODE" = "1" ]; then
+  if [ "$MODE" = "2" ]; then   # <--- PERHATIAN: di menu, "2" adalah Size Target
 
     duration=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$file")
 
-    # ===== PATCH FIX 1 =====
-    if [ -z "$duration" ] || [ "$duration" = "N/A" ]; then
-      whiptail --msgbox "❌ ERROR: durasi tidak terbaca" 10 50
+    # Validasi durasi lebih ketat
+    if [[ -z "$duration" || "$duration" = "N/A" || ! "$duration" =~ ^[0-9]+\.?[0-9]*$ ]]; then
+      whiptail --msgbox "❌ ERROR: durasi tidak terbaca untuk file $name" 10 55
       continue
     fi
 
-    target_bytes=$(echo "$SIZE_MB * 1024 * 1024" | bc)
-
+    target_bytes=$(echo "$SIZE_MB * 1024 * 1024" | bc -l)
     audio_kbps=128
-    audio_bytes=$(echo "$audio_kbps * 1000 * $duration / 8" | bc)
-
+    audio_bytes=$(echo "$audio_kbps * 1000 * $duration / 8" | bc -l)
     safety=0.95
 
-    video_bytes=$(echo "$target_bytes - $audio_bytes" | bc)
-    video_bytes=$(echo "$video_bytes * $safety" | bc)
+    video_bytes=$(echo "($target_bytes - $audio_bytes) * $safety" | bc -l)
+    # Hitung bitrate video dalam kbps (pembulatan ke atas)
+    vbit=$(echo "scale=0; ($video_bytes * 8) / ($duration * 1000) + 0.5" | bc -l 2>/dev/null)
 
-    vbit=$(echo "($video_bytes * 8) / $duration / 1000" | bc)
-
-    # ===== PATCH FIX 2 =====
-    if [ -z "$vbit" ]; then
+    # Jika hasil kosong atau 0, pakai default 300
+    if [[ -z "$vbit" || "$vbit" -le 0 ]]; then
       vbit=300
     fi
 
-    if [ "$vbit" -lt 120 ] 2>/dev/null; then
+    # Batasi minimal 120 kbps, maksimal 5000 kbps
+    if [ "$vbit" -lt 120 ]; then
       vbit=120
+    elif [ "$vbit" -gt 5000 ]; then
+      vbit=5000
     fi
 
-    ffmpeg -y -loglevel error -i "$file" -r $FPS_VAL $SCALE \
+    # Two-pass encoding dengan H.264 (stabil untuk mode size)
+    ffmpeg -y -loglevel error -i "$file" -r "$FPS_VAL" $SCALE \
       -c:v libx264 -b:v ${vbit}k -pass 1 -an -f null /dev/null
 
-    ffmpeg -y -i "$file" -r $FPS_VAL $SCALE \
+    ffmpeg -y -i "$file" -r "$FPS_VAL" $SCALE \
       -c:v libx264 -b:v ${vbit}k -pass 2 \
       -c:a aac -b:a ${audio_kbps}k "$out"
 
-  else
+    # Bersihkan file sementara two-pass
+    rm -f ffmpeg2pass-0.log ffmpeg2pass-0.log.mbtree
 
+  else
+    # MODE CRF Quality
     if [ "$CODEC" = "265" ]; then
-      ffmpeg -y -i "$file" -r $FPS_VAL $SCALE \
+      ffmpeg -y -i "$file" -r "$FPS_VAL" $SCALE \
         -c:v libx265 -crf $CRF \
         -c:a aac -b:a 128k "$out"
     else
-      ffmpeg -y -i "$file" -r $FPS_VAL $SCALE \
+      ffmpeg -y -i "$file" -r "$FPS_VAL" $SCALE \
         -c:v libx264 -crf $CRF \
         -c:a aac -b:a 128k "$out"
     fi
-
   fi
 
 done
