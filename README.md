@@ -1,10 +1,13 @@
+
 # 🎬 irh_vconvert
 
 Tool convert video berbasis Termux dengan UI Whiptail, dilengkapi deteksi perangkat keras dan koreksi ukuran file otomatis.
 
 ---
 
-## ⚙️ Fitur Lengkap
+## 🇮🇩 Bahasa Indonesia
+
+### ⚙️ Fitur Lengkap
 
 - ✅ Auto install dependency (ffmpeg, ffprobe, bc, whiptail, mediainfo)
 - ✅ Deteksi spesifikasi perangkat (RAM, CPU core) → klasifikasi LOW / MEDIUM / HIGH
@@ -26,9 +29,7 @@ Tool convert video berbasis Termux dengan UI Whiptail, dilengkapi deteksi perang
 - ✅ Output otomatis ke folder `/sdcard/irh_vconvert/output`
 - ✅ Penanganan durasi video dengan 3 metode (ffprobe, mediainfo, decode penuh)
 
----
-
-## 📁 Struktur Folder
+### 📁 Struktur Folder
 
 ```
 
@@ -38,9 +39,7 @@ Tool convert video berbasis Termux dengan UI Whiptail, dilengkapi deteksi perang
 
 ```
 
----
-
-## 📲 Cara Install
+### 📲 Cara Install
 
 1. **Clone repository**
    ```bash
@@ -57,8 +56,6 @@ Tool convert video berbasis Termux dengan UI Whiptail, dilengkapi deteksi perang
    termux-setup-storage
    ```
 
----
-
 ▶️ Cara Pakai
 
 Setelah install, cukup ketik:
@@ -72,8 +69,6 @@ Atau jika ingin menjalankan langsung dari folder:
 ```bash
 bash irh_vconvert.sh
 ```
-
----
 
 📥 Panduan Penggunaan
 
@@ -90,8 +85,6 @@ bash irh_vconvert.sh
 4. Pilih codec, FPS, resolusi sesuai kebutuhan.
 5. Tunggu proses selesai
 
----
-
 📤 Hasil
 
 File hasil konversi akan berada di:
@@ -102,16 +95,12 @@ File hasil konversi akan berada di:
 
 Nama file: conv_<nama asli>
 
----
-
 ⚠️ Catatan
 
 · CRF kecil = kualitas tinggi (ukuran lebih besar)
 · H265 lebih kecil tapi lebih berat saat encoding
 · Mode Size Target tidak 100% presisi karena faktor kompleksitas video, tetapi iterasi koreksi akan mendekati target dengan toleransi 0.5 MB.
 · Jika durasi tidak terbaca, script akan menggunakan metode decode yang lambat – harap bersabar.
-
----
 
 👨‍💻 Requirements
 
@@ -123,10 +112,114 @@ Nama file: conv_<nama asli>
 
 ---
 
-📄 Lisensi
+🇬🇧 English
+
+⚙️ Full Features
+
+· ✅ Auto install dependencies (ffmpeg, ffprobe, bc, whiptail, mediainfo)
+· ✅ Device spec detection (RAM, CPU cores) → classification LOW / MEDIUM / HIGH
+  · LOW → Limited (cannot convert 2K and 4K)
+  · MEDIUM → Warning (recommended max 1080p, FPS 30)
+  · HIGH → Normal
+· ✅ Handle libbluray.so.3 library error (auto reinstall if needed)
+· ✅ Conversion modes:
+  · CRF Quality (input CRF value, default 23, range 0–51)
+  · Size Target (input target size in MB, with auto correction iteration)
+· ✅ Size Target iteration:
+  · Initial safety factor 1.05 (tends to overshoot target)
+  · Max 5 iterations
+  · Overshoot tolerance ≤ 0.5 MB
+  · Final result must not be below target
+· ✅ FPS options (24, 30, 60, original)
+· ✅ Resolution options (360p, 480p, 720p, 1080p, 2K, 4K, original)
+· ✅ Batch processing (all files in input folder will be processed)
+· ✅ Auto output to folder /sdcard/irh_vconvert/output
+· ✅ Video duration handling with 3 methods (ffprobe, mediainfo, full decode)
+
+📁 Folder Structure
+
+```
+/sdcard/irh_vconvert/
+├── input   (put your videos here)
+└── output  (converted videos)
+```
+
+📲 Installation
+
+1. Clone repository
+   ```bash
+   git clone https://github.com/irham-s-a/irh_vconvert.git
+   cd irh_vconvert
+   ```
+2. Run installer (automatically installs dependencies and creates alias irh-vconvert)
+   ```bash
+   bash install.sh
+   ```
+3. Make sure Termux has storage access
+   ```bash
+   termux-setup-storage
+   ```
+
+▶️ Usage
+
+After installation, just type:
+
+```bash
+irh-vconvert
+```
+
+Or run directly from folder:
+
+```bash
+bash irh_vconvert.sh
+```
+
+📥 How to Use
+
+1. Prepare videos
+      Copy video files (mp4, mkv, mov) to:
+   ```
+   /sdcard/irh_vconvert/input
+   ```
+2. Run script
+      Select Convert Video menu.
+3. Choose mode
+   · CRF Quality → enter CRF value (18–28 recommended, default 23).
+   · Size Target → enter target size in MB (e.g., 50). Script will try to reach size ≥ target with max overshoot 0.5 MB.
+4. Select codec, FPS, resolution as needed.
+5. Wait until finished
+
+📤 Output
+
+Converted files will be in:
+
+```
+/sdcard/irh_vconvert/output/
+```
+
+Filename: conv_<original name>
+
+⚠️ Notes
+
+· Lower CRF = higher quality (larger file size)
+· H265 is smaller but heavier during encoding
+· Size Target mode is not 100% precise due to video complexity, but iteration correction will approach target with 0.5 MB tolerance.
+· If duration cannot be read, script will use slow decode method – please be patient.
+
+👨‍💻 Requirements
+
+· Termux
+· ffmpeg
+· bc
+· whiptail
+· mediainfo
+
+---
+
+📄 Lisensi / License
 
 MIT License
 
 ---
 
-Dibuat oleh irham-s-a
+Dibuat oleh / Created by irham-s-a
