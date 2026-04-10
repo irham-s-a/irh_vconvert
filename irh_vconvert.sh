@@ -1,7 +1,7 @@
 #!/data/data/com.termux/files/usr/bin/bash
 
 # =========================
-# 1. WHIPTAIL SAFE CHECK (NO UI YET)
+# 1. WHIPTAIL CHECK
 # =========================
 if ! command -v whiptail >/dev/null 2>&1; then
   pkg update -y
@@ -14,18 +14,15 @@ command -v whiptail >/dev/null 2>&1 || {
 }
 
 # =========================
-# 2. DEPENDENCY CHECK (STRICT + Y/N INSTALL)
+# 2. DEPENDENCY CHECK
 # =========================
 check_dep() {
-  if command -v "$1" >/dev/null 2>&1; then
-    return
-  fi
+  command -v "$1" >/dev/null 2>&1 && return
 
-  whiptail --yesno "❌ $1 belum ada\nInstall sekarang?" 12 50
+  whiptail --yesno "❌ $1 belum ada\nInstall?" 12 50
   if [ $? -eq 0 ]; then
     pkg install -y "$2"
   else
-    whiptail --msgbox "❌ $1 wajib untuk menjalankan aplikasi" 12 50
     exit 1
   fi
 }
@@ -34,179 +31,245 @@ check_dep ffmpeg ffmpeg
 check_dep ffprobe ffmpeg
 check_dep bc bc
 
-# FINAL VERIFY
-command -v ffmpeg >/dev/null 2>&1 || exit
-command -v bc >/dev/null 2>&1 || exit
+# =========================
+# 3. DEVICE SPECS DETECTION
+# =========================
+RAM_KB=$(grep MemTotal /proc/meminfo | awk '{print $2}')
+RAM_MB=$((RAM_KB / 1024))
+
+CPU_CORE=$(nproc)
+CPU_NAME=$(grep -m1 "model name\|Hardware\|Processor" /proc/cpuinfo | cut -d: -f2)
+
+# CLASSIFICATION (FIXED RULE)
+if [ "$RAM_MB" -le 2048 ] || [ "$CPU_CORE" -le 4 ]; then
+  LEVEL="LOW"
+elif [ "$RAM_MB" -le 4096 ] || [ "$CPU_CORE" -le 6 ]; then
+  LEVEL="MEDIUM"
+else
+  LEVEL="HIGH"
+fi
 
 # =========================
-# 3. AUTO FOLDER
+# 4. SPEK UI (FULL DETAIL)
 # =========================
-BASE_DIR="/sdcard/irh_vconvert"
-INPUT_DIR="$BASE_DIR/input"
-OUTPUT_DIR="$BASE_DIR/output"
+whiptail --msgbox "
+📱 DEVICE SPEC INFO
+========================
 
-mkdir -p "$INPUT_DIR"
-mkdir -p "$OUTPUT_DIR"
+RAM        : ${RAM_MB} MB
+CPU CORE   : ${CPU_CORE}
+CPU        : ${CPU_NAME:-UNKNOWN}
+
+STATUS     : $LEVEL
+
+========================
+RULE SYSTEM
+========================
+LOW    → BLOCK (tidak bisa lanjut)
+MEDIUM → WARNING (boleh lanjut)
+HIGH   → NORMAL
+========================
+" 22 60
 
 # =========================
-# 4. MAIN LOOP
+# 5. LOW DEVICE BLOCK
+# =========================
+if [ "$LEVEL" = "LOW" ]; then
+  whiptail --msgbox "
+❌ DEVICE BLOCKED
+
+HP terlalu lemah untuk proses ini.
+
+Saran:
+- upgrade device
+- atau gunakan resolusi 360p saja
+" 15 55
+  exit 1
+fi
+
+# =========================
+# 6. MEDIUM WARNING (WAJIB CONSISTENT)
+# =========================
+if [ "$LEVEL" = "MEDIUM" ]; then
+  whiptail --msgbox "
+⚠ WARNING DEVICE MEDIUM
+
+Performa terbatas.
+
+Rekomendasi:
+- max 1080p stabil
+- 2K bisa lag
+- 4K tidak disarankan
+- gunakan FPS 30
+" 16 60
+fi
+
+# =========================
+# 7. FOLDER
+# =========================
+BASE="/sdcard/irh_vconvert"
+IN="$BASE/input"
+OUT="$BASE/output"
+
+mkdir -p "$IN" "$OUT"
+
+# =========================
+# 8. MAIN MENU
 # =========================
 while true; do
 
-MENU=$(whiptail --title "irh_vconvert" \
---menu "READY SYSTEM\n\nInput: $INPUT_DIR\nOutput: $OUTPUT_DIR" \
-15 60 3 \
-"1" "Mulai Convert" \
+MENU=$(whiptail --menu "
+IRH VCONVERT
+
+RAM  : $RAM_MB MB
+CPU  : $CPU_CORE CORE
+TYPE : $LEVEL
+
+INPUT : $IN
+OUTPUT: $OUT
+" 18 60 3 \
+"1" "Convert Video" \
 "2" "Panduan" \
 "0" "Keluar" \
 3>&1 1>&2 2>&3)
 
-[ $? -ne 0 ] && continue
+[ -z "$MENU" ] && continue
 
 case $MENU in
+0)
+  exit
+;;
 
-  0)
-    break
-  ;;
+2)
+whiptail --msgbox "
+📘 PANDUAN
 
-  2)
-    whiptail --msgbox \
-"📘 PANDUAN
+1. Taruh video di:
+$IN
 
-1. Taruh video ke:
-$INPUT_DIR
+2. Pilih convert
 
-2. Pilih Convert
-
-3. Pilih urutan:
-- Mode (Size / CRF)
-- Codec (H264 / H265)
+3. Setting:
+- Mode
+- Codec
 - FPS
 - Resolusi
 
 4. Hasil:
-$OUTPUT_DIR
+$OUT
 " 18 60
-    continue
-  ;;
-
+continue
+;;
 esac
 
 # =========================
-# 5. MODE (SIZE / CRF)
+# 9. MODE
 # =========================
-MODE=$(whiptail --menu "Metode Convert" 15 60 2 \
-"1" "Custom Size (MB target)" \
-"2" "CRF Quality" \
+MODE=$(whiptail --menu "MODE" 12 50 2 \
+"1" "CRF Quality" \
+"2" "Size Target" \
 3>&1 1>&2 2>&3)
 
-[ $? -ne 0 ] && continue
+[ -z "$MODE" ] && continue
 
 # =========================
-# 6. CODEC (BENAR DI SINI)
+# 10. CODEC
 # =========================
-CODEC=$(whiptail --menu "Pilih Codec" 15 60 2 \
-"264" "H264 (compatibility)" \
-"265" "H265 (smaller file)" \
+CODEC=$(whiptail --menu "CODEC" 12 50 2 \
+"264" "H264" \
+"265" "H265" \
 3>&1 1>&2 2>&3)
 
-[ $? -ne 0 ] && continue
+[ -z "$CODEC" ] && continue
 
 # =========================
-# 7. FPS
+# 11. FPS
 # =========================
-FPS_OPT=$(whiptail --menu "FPS" 15 60 4 \
+FPS=$(whiptail --menu "FPS" 14 50 4 \
 "24" "Cinematic" \
 "30" "Normal" \
 "60" "Smooth" \
 "ori" "Original" \
 3>&1 1>&2 2>&3)
 
-[ $? -ne 0 ] && continue
+[ -z "$FPS" ] && continue
 
 # =========================
-# 8. RESOLUSI
+# 12. RESOLUSI
 # =========================
-RES_OPT=$(whiptail --menu "Resolusi" 15 60 5 \
+RES=$(whiptail --menu "RESOLUSI" 16 50 7 \
 "360" "360p" \
 "480" "480p" \
 "720" "720p" \
 "1080" "1080p" \
+"1440" "2K" \
+"2160" "4K" \
 "ori" "Original" \
 3>&1 1>&2 2>&3)
 
-[ $? -ne 0 ] && continue
-
-[ "$RES_OPT" != "ori" ] && SCALE="-vf scale=-2:$RES_OPT" || SCALE=""
+[ -z "$RES" ] && continue
 
 # =========================
-# 9. INPUT PARAMETER
+# 13. LOW SAFETY BLOCK (EXTRA RULE)
 # =========================
-if [ "$MODE" = "2" ]; then
-  CRF=$(whiptail --inputbox "CRF (18-28)" 10 50 23 \
-  3>&1 1>&2 2>&3)
-  CRF=${CRF:-23}
+if [ "$LEVEL" = "LOW" ] && { [ "$RES" = "1440" ] || [ "$RES" = "2160" ]; }; then
+  whiptail --msgbox "❌ BLOCK: DEVICE LOW tidak bisa 2K/4K" 12 60
+  continue
 fi
 
-if [ "$MODE" = "1" ]; then
-  SIZE_MB=$(whiptail --inputbox "Target Size (MB)" 10 50 \
-  3>&1 1>&2 2>&3)
-  [ $? -ne 0 ] && continue
+# MEDIUM CONFIRM WARNING (STRICT UI RULE)
+if [ "$LEVEL" = "MEDIUM" ] && { [ "$RES" = "1440" ] || [ "$RES" = "2160" ]; }; then
+  whiptail --yesno "
+⚠ WARNING EXTREME LOAD
+
+Device MEDIUM + resolusi berat
+Risiko:
+- lag
+- panas
+- crash
+
+Lanjut?" 15 60 || continue
 fi
 
+# SCALE
+[ "$RES" != "ori" ] && SCALE="-vf scale=-2:$RES" || SCALE=""
+
 # =========================
-# 10. PROCESS FILES
+# 14. PROCESS FILES
 # =========================
-for file in "$INPUT_DIR"/*.mp4 "$INPUT_DIR"/*.mkv "$INPUT_DIR"/*.mov; do
+for file in "$IN"/*; do
   [ -e "$file" ] || continue
 
   name=$(basename "$file")
-  out="$OUTPUT_DIR/converted_$name"
+  out="$OUT/conv_$name"
 
-  # FPS
-  if [ "$FPS_OPT" = "ori" ]; then
-    FPS_VAL=$(ffprobe -v error -select_streams v:0 \
-      -show_entries stream=r_frame_rate \
-      -of default=noprint_wrappers=1:nokey=1 "$file")
-    FPS_VAL=$(echo "$FPS_VAL" | awk -F'/' '{print $1/$2}')
+  FPS_VAL=$([ "$FPS" = "ori" ] && echo 30 || echo $FPS)
+
+  if [ "$MODE" = "1" ]; then
+    duration=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$file")
+    vbit=$(echo "($SIZE_MB * 8192) / $duration - 128" | bc)
+
+    ffmpeg -y -i "$file" -r $FPS_VAL $SCALE \
+      -c:v libx264 -b:v ${vbit}k -pass 1 -an -f mp4 /dev/null
+
+    ffmpeg -i "$file" -r $FPS_VAL $SCALE \
+      -c:v libx264 -b:v ${vbit}k -pass 2 \
+      -c:a aac -b:a 128k "$out"
+
   else
-    FPS_VAL=$FPS_OPT
-  fi
-
-  (
-    echo "10"
-    echo "# Processing $name"
-
-    if [ "$MODE" = "1" ]; then
-      duration=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$file")
-      vbit=$(echo "($SIZE_MB * 8192) / $duration - 128" | bc)
-
-      ffmpeg -y -i "$file" -r $FPS_VAL $SCALE \
-        -c:v libx264 -b:v ${vbit}k -pass 1 -an -f mp4 /dev/null
-
-      echo "60"
-
+    if [ "$CODEC" = "265" ]; then
       ffmpeg -i "$file" -r $FPS_VAL $SCALE \
-        -c:v libx264 -b:v ${vbit}k -pass 2 \
+        -c:v libx265 -crf $CRF -preset medium \
         -c:a aac -b:a 128k "$out"
-
     else
-      if [ "$CODEC" = "265" ]; then
-        ffmpeg -i "$file" -r $FPS_VAL $SCALE \
-          -c:v libx265 -crf $CRF -preset medium \
-          -c:a aac -b:a 128k "$out"
-      else
-        ffmpeg -i "$file" -r $FPS_VAL $SCALE \
-          -c:v libx264 -crf $CRF -preset medium \
-          -c:a aac -b:a 128k "$out"
-      fi
+      ffmpeg -i "$file" -r $FPS_VAL $SCALE \
+        -c:v libx264 -crf $CRF -preset medium \
+        -c:a aac -b:a 128k "$out"
     fi
-
-    echo "100"
-  ) | whiptail --gauge "Processing..." 10 60 0
+  fi
 
 done
 
-whiptail --msgbox "✅ Semua video selesai!" 10 40
+whiptail --msgbox "✅ DONE" 10 40
 
 done
