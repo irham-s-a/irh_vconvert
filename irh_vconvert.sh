@@ -88,7 +88,7 @@ Saran:
 fi
 
 # =========================
-# 6. MEDIUM WARNING (WAJIB CONSISTENT)
+# 6. MEDIUM WARNING
 # =========================
 if [ "$LEVEL" = "MEDIUM" ]; then
   whiptail --msgbox "
@@ -112,6 +112,12 @@ IN="$BASE/input"
 OUT="$BASE/output"
 
 mkdir -p "$IN" "$OUT"
+
+# =========================
+# FIX VARIABLES
+# =========================
+SIZE_MB=100
+CRF=23
 
 # =========================
 # 8. MAIN MENU
@@ -209,30 +215,23 @@ RES=$(whiptail --menu "RESOLUSI" 16 50 7 \
 
 [ -z "$RES" ] && continue
 
+[ "$RES" != "ori" ] && SCALE="-vf scale=-2:$RES" || SCALE=""
+
 # =========================
-# 13. LOW SAFETY BLOCK (EXTRA RULE)
+# 13. LOW SAFETY BLOCK
 # =========================
 if [ "$LEVEL" = "LOW" ] && { [ "$RES" = "1440" ] || [ "$RES" = "2160" ]; }; then
   whiptail --msgbox "❌ BLOCK: DEVICE LOW tidak bisa 2K/4K" 12 60
   continue
 fi
 
-# MEDIUM CONFIRM WARNING (STRICT UI RULE)
 if [ "$LEVEL" = "MEDIUM" ] && { [ "$RES" = "1440" ] || [ "$RES" = "2160" ]; }; then
   whiptail --yesno "
 ⚠ WARNING EXTREME LOAD
 
 Device MEDIUM + resolusi berat
-Risiko:
-- lag
-- panas
-- crash
-
 Lanjut?" 15 60 || continue
 fi
-
-# SCALE
-[ "$RES" != "ori" ] && SCALE="-vf scale=-2:$RES" || SCALE=""
 
 # =========================
 # 14. PROCESS FILES
@@ -245,27 +244,46 @@ for file in "$IN"/*; do
 
   FPS_VAL=$([ "$FPS" = "ori" ] && echo 30 || echo $FPS)
 
+  # =========================
+  # MODE 1 - SIZE LOCK FIXED
+  # =========================
   if [ "$MODE" = "1" ]; then
+
     duration=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$file")
-    vbit=$(echo "($SIZE_MB * 8192) / $duration - 128" | bc)
+
+    target_bytes=$(echo "$SIZE_MB * 1024 * 1024" | bc)
+
+    audio_kbps=128
+    audio_bytes=$(echo "$audio_kbps * 1000 * $duration / 8" | bc)
+
+    safety=0.95
+
+    video_bytes=$(echo "$target_bytes - $audio_bytes" | bc)
+    video_bytes=$(echo "$video_bytes * $safety" | bc)
+
+    vbit=$(echo "($video_bytes * 8) / $duration / 1000" | bc)
+
+    [ "$vbit" -lt 120 ] && vbit=120
 
     ffmpeg -y -i "$file" -r $FPS_VAL $SCALE \
       -c:v libx264 -b:v ${vbit}k -pass 1 -an -f mp4 /dev/null
 
-    ffmpeg -i "$file" -r $FPS_VAL $SCALE \
+    ffmpeg -y -i "$file" -r $FPS_VAL $SCALE \
       -c:v libx264 -b:v ${vbit}k -pass 2 \
-      -c:a aac -b:a 128k "$out"
+      -c:a aac -b:a ${audio_kbps}k "$out"
 
   else
+
     if [ "$CODEC" = "265" ]; then
-      ffmpeg -i "$file" -r $FPS_VAL $SCALE \
-        -c:v libx265 -crf $CRF -preset medium \
+      ffmpeg -y -i "$file" -r $FPS_VAL $SCALE \
+        -c:v libx265 -crf $CRF \
         -c:a aac -b:a 128k "$out"
     else
-      ffmpeg -i "$file" -r $FPS_VAL $SCALE \
-        -c:v libx264 -crf $CRF -preset medium \
+      ffmpeg -y -i "$file" -r $FPS_VAL $SCALE \
+        -c:v libx264 -crf $CRF \
         -c:a aac -b:a 128k "$out"
     fi
+
   fi
 
 done
