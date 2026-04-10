@@ -220,20 +220,14 @@ case $MENU in
 2)
 whiptail --msgbox "
 📘 PANDUAN
-
-1. Taruh video di:
-$IN
-
+1. Taruh video di: $IN
 2. Pilih convert
-
 3. Setting:
 - Mode
 - Codec
 - FPS
 - Resolusi
-
-4. Hasil:
-$OUT
+4. Hasil: $OUT
 " 18 60
 continue
 ;;
