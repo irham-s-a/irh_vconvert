@@ -420,14 +420,11 @@ Contoh: 120 atau 2:30 atau 1:30:45" 12 60 "" 3>&1 1>&2 2>&3)
     
     # Konversi format durasi ke detik
     if [[ "$DURATION_INPUT" =~ ^[0-9]+$ ]]; then
-      # Format: detik saja
       DURATION_MANUAL="$DURATION_INPUT"
     elif [[ "$DURATION_INPUT" =~ ^[0-9]+:[0-9]+$ ]]; then
-      # Format: m:ss
       IFS=: read -r m s <<< "$DURATION_INPUT"
       DURATION_MANUAL=$((10#$m * 60 + 10#$s))
     elif [[ "$DURATION_INPUT" =~ ^[0-9]+:[0-9]+:[0-9]+$ ]]; then
-      # Format: h:m:ss
       IFS=: read -r h m s <<< "$DURATION_INPUT"
       DURATION_MANUAL=$((10#$h * 3600 + 10#$m * 60 + 10#$s))
     else
@@ -473,7 +470,7 @@ for file in "$IN"/*; do
       echo "✅ MENGGUNAKAN DURASI MANUAL" >&2
       echo "   File: $name" >&2
       echo "   Durasi: $duration detik" >&2
-      echo "   (Tidak perlu scan, langsung konversi!)" >&2
+      echo "   (Tidak perlu scan, langsung konversi dengan 1-PASS)" >&2
       echo "==============================================" >&2
     else
       # SCAN OTOMATIS
@@ -481,7 +478,7 @@ for file in "$IN"/*; do
       echo "==============================================" >&2
       echo "📹 SEDANG MEMERIKSA INFORMASI VIDEO" >&2
       echo "   File: $name" >&2
-      echo "   Metode: Scan otomatis (LAMBAT)" >&2
+      echo "   Metode: Scan otomatis (LAMBAT, 2-PASS encoding)" >&2
       echo "   ⏳ Ini mungkin butuh 30-60 detik..." >&2
       echo "   Mohon tunggu..." >&2
       echo "==============================================" >&2
@@ -527,18 +524,31 @@ for file in "$IN"/*; do
       echo "   Toleransi lebih: max $tolerance MB" >&2
       echo "   Menggunakan bitrate video: ${vbit} kbps" >&2
       echo "   Safety factor: $safety" >&2
-      echo "   Memulai two-pass encoding..." >&2
+      
+      if [ "$DURATION_MODE" = "1" ]; then
+        echo "   Mode encoding: ONE-PASS (cepat)" >&2
+        echo "   Memulai one-pass encoding..." >&2
+      else
+        echo "   Mode encoding: TWO-PASS (akurat)" >&2
+        echo "   Memulai two-pass encoding (pass 1 & 2)..." >&2
+      fi
       echo "   Mohon tunggu...." >&2
       echo "--------------------------------------------------" >&2
       
-      ffmpeg -y -loglevel error -i "$file" -r "$FPS_VAL" $SCALE \
-        -c:v libx264 -b:v ${vbit}k -pass 1 -an -f null /dev/null < /dev/null
-      
-      ffmpeg -y -i "$file" -r "$FPS_VAL" $SCALE \
-        -c:v libx264 -b:v ${vbit}k -pass 2 \
-        -c:a aac -b:a ${audio_kbps}k "$out" < /dev/null
-      
-      rm -f ffmpeg2pass-0.log ffmpeg2pass-0.log.mbtree
+      if [ "$DURATION_MODE" = "1" ]; then
+        # ONE-PASS encoding untuk manual duration
+        ffmpeg -y -loglevel error -i "$file" -r "$FPS_VAL" $SCALE \
+          -c:v libx264 -b:v ${vbit}k \
+          -c:a aac -b:a ${audio_kbps}k "$out" < /dev/null
+      else
+        # TWO-PASS encoding untuk scan otomatis
+        ffmpeg -y -loglevel error -i "$file" -r "$FPS_VAL" $SCALE \
+          -c:v libx264 -b:v ${vbit}k -pass 1 -an -f null /dev/null < /dev/null
+        ffmpeg -y -i "$file" -r "$FPS_VAL" $SCALE \
+          -c:v libx264 -b:v ${vbit}k -pass 2 \
+          -c:a aac -b:a ${audio_kbps}k "$out" < /dev/null
+        rm -f ffmpeg2pass-0.log ffmpeg2pass-0.log.mbtree
+      fi
       
       if [ ! -f "$out" ]; then
         whiptail --msgbox "❌ GAGAL mengkonversi $name pada iterasi ke-$iter" 12 55
