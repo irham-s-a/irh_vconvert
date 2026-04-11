@@ -85,7 +85,7 @@ File hasil konversi akan berada di:
 /sdcard/irh_vconvert/output/
 ```
 
-Nama file: conv_<nama-asli-file>
+Nama file: conv_(nama asli file)
 
 ⚠️ Catatan
 
@@ -185,7 +185,7 @@ Converted files will be in:
 /sdcard/irh_vconvert/output/
 ```
 
-Filename: conv_<original-file-name>
+Filename: conv_(original file name)
 
 ⚠️ Notes
 
