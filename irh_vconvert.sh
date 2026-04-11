@@ -36,7 +36,7 @@ check_dep bc bc
 check_dep mediainfo mediainfo
 
 # =========================
-# 2.5. CEK FFMPEG LINKING ERROR (libbluray.so.3 dll)
+# 2.5. CEK FFMPEG LINKING ERROR
 # =========================
 check_ffmpeg_works() {
   ffmpeg -version >/dev/null 2>&1
@@ -61,7 +61,7 @@ RAM_MB=$((RAM_KB / 1024))
 CPU_CORE=$(nproc)
 CPU_NAME=$(grep -m1 "model name\|Hardware\|Processor" /proc/cpuinfo | cut -d: -f2)
 
-# CLASSIFICATION (FIXED RULE)
+# CLASSIFICATION
 if [ "$RAM_MB" -le 2048 ] || [ "$CPU_CORE" -le 4 ]; then
   LEVEL="LOW"
 elif [ "$RAM_MB" -le 4096 ] || [ "$CPU_CORE" -le 6 ]; then
@@ -71,7 +71,7 @@ else
 fi
 
 # =========================
-# 4. SPEK UI (FULL DETAIL)
+# 4. SPEK UI
 # =========================
 whiptail --msgbox "
 📱 DEVICE SPEC INFO
@@ -130,26 +130,48 @@ OUT="$BASE/output"
 mkdir -p "$IN" "$OUT"
 
 # =========================
-# FIX VARIABLES (default)
+# 7.5 CACHE DIRECTORY (Hidden in Termux)
+# =========================
+CACHE_DIR="$PREFIX/var/lib/irh_vconvert"
+mkdir -p "$CACHE_DIR"
+
+# =========================
+# FIX VARIABLES
 # =========================
 CRF_DEFAULT=23
 
 # =========================
-# FUNGSI GET DURATION (dengan notifikasi CLI ke stderr, dan </dev/null)
+# AUTO CLEANUP CACHE
+# =========================
+cleanup_old_cache() {
+  if [ -d "$CACHE_DIR" ]; then
+    find "$CACHE_DIR" -type f -mtime +7 -delete 2>/dev/null
+  fi
+}
+
+# Jalankan cleanup saat startup
+cleanup_old_cache
+
+# =========================
+# IMPROVED GET_DURATION FUNCTION
 # =========================
 get_duration() {
   local file="$1"
-  local cache_dir="/sdcard/irh_vconvert/.duration_cache"
   local file_hash=$(echo -n "$file" | md5sum | cut -d' ' -f1)
-  local cache_file="$cache_dir/$file_hash.cache"
-  
-  mkdir -p "$cache_dir"
+  local cache_file="$CACHE_DIR/$file_hash.cache"
   
   # Check cache first
   if [ -f "$cache_file" ]; then
-    local cached_dur=$(cat "$cache_file")
-    echo "$cached_dur"
-    return 0
+    local cached_dur=$(cat "$cache_file" 2>/dev/null)
+    local cache_time=$(stat -c %Y "$cache_file" 2>/dev/null)
+    local current_time=$(date +%s)
+    local cache_age=$((current_time - cache_time))
+    
+    # Cache valid untuk 24 jam
+    if [ $cache_age -lt 86400 ]; then
+      echo "$cached_dur"
+      return 0
+    fi
   fi
   
   local dur
@@ -162,7 +184,7 @@ get_duration() {
     return 0
   fi
   
-  # Metode 2: ffprobe (JSON format)
+  # Metode 2: ffprobe (stream format)
   dur=$(ffprobe -v error -select_streams v:0 -show_entries stream=duration -of default=noprint_wrappers=1:nokey=1 "$file" 2>/dev/null)
   if [[ -n "$dur" && "$dur" =~ ^[0-9]+\.?[0-9]*$ ]]; then
     echo "$dur" > "$cache_file"
@@ -183,13 +205,12 @@ get_duration() {
     fi
   fi
   
-  # Metode 4: Frame counting (FASTER THAN FULL DECODE)
+  # Metode 4: Frame counting (LEBIH CEPAT)
   echo "" >&2
   echo "==============================================" >&2
   echo "⏳ MEMBACA DURASI (FRAME COUNTING)" >&2
   echo "   File: $(basename "$file")" >&2
-  echo "   Menggunakan metode frame counting..." >&2
-  echo "   (lebih cepat dari full decode)" >&2
+  echo "   Metode: Frame counting (lebih cepat)" >&2
   echo "==============================================" >&2
   
   local tmp_log=$(mktemp)
@@ -198,7 +219,6 @@ get_duration() {
   rm -f "$tmp_log"
   
   if [[ -n "$frames" && "$frames" =~ ^[0-9]+$ ]]; then
-    # Get FPS from ffprobe
     local fps=$(ffprobe -v error -select_streams v:0 -show_entries stream=r_frame_rate -of default=noprint_wrappers=1:nokey=1 "$file" 2>/dev/null)
     if [[ -n "$fps" ]]; then
       fps=$(echo "scale=2; $fps" | bc -l 2>/dev/null || echo "30")
@@ -208,7 +228,7 @@ get_duration() {
     
     dur=$(echo "scale=3; $frames / $fps" | bc -l 2>/dev/null)
     if [[ -n "$dur" ]]; then
-      echo "   ✓ Durasi terbaca: ${dur} detik (dari $frames frame @ ${fps} fps)" >&2
+      echo "   ✓ Durasi: ${dur} detik (dari $frames frame)" >&2
       echo "==============================================" >&2
       echo "$dur" > "$cache_file"
       echo "$dur"
@@ -216,8 +236,8 @@ get_duration() {
     fi
   fi
   
-  # Metode 5: Full decode (ULTIMATE FALLBACK)
-  echo "   Frame counting gagal, fallback ke full decode..." >&2
+  # Metode 5: Full decode (FALLBACK TERAKHIR)
+  echo "   Fallback: Full decode (lambat)..." >&2
   tmp_log=$(mktemp)
   ffmpeg -i "$file" -f null - < /dev/null 2> "$tmp_log"
   dur=$(grep -oP 'time=\K[0-9:.]+' "$tmp_log" | tail -n1)
@@ -227,7 +247,7 @@ get_duration() {
     IFS=: read -r h m s <<< "$dur"
     s=${s%.*}
     dur=$((10#$h * 3600 + 10#$m * 60 + 10#$s))
-    echo "   ✓ Durasi terbaca: $dur detik (full decode)" >&2
+    echo "   ✓ Durasi: $dur detik" >&2
     echo "==============================================" >&2
     echo "$dur" > "$cache_file"
     echo "$dur"
@@ -238,6 +258,7 @@ get_duration() {
   echo "==============================================" >&2
   return 1
 }
+
 # =========================
 # 8. MAIN MENU
 # =========================
@@ -347,13 +368,12 @@ Lanjut?" 15 60 || continue
 fi
 
 # =========================
-# 14. INPUT CRF (jika mode CRF) ATAU INPUT SIZE (jika mode Size Target)
+# 14. INPUT CRF atau SIZE
 # =========================
 CRF=$CRF_DEFAULT
 SIZE_MB=100
 
 if [ "$MODE" = "1" ]; then
-  # Mode CRF: minta nilai CRF
   CRF_INPUT=$(whiptail --inputbox "Masukkan nilai CRF (Constant Rate Factor)\n\nSemakin kecil = kualitas lebih baik (18-28)\nDefault 23 (direkomendasikan)" 12 60 "$CRF_DEFAULT" 3>&1 1>&2 2>&3)
   if [ $? -eq 0 ] && [ -n "$CRF_INPUT" ]; then
     if [[ "$CRF_INPUT" =~ ^[0-9]+$ ]] && [ "$CRF_INPUT" -ge 0 ] && [ "$CRF_INPUT" -le 51 ]; then
@@ -363,7 +383,6 @@ if [ "$MODE" = "1" ]; then
     fi
   fi
 else
-  # Mode Size Target: minta ukuran MB
   SIZE_MB_INPUT=$(whiptail --inputbox "Masukkan ukuran target (MB)\nDefault 100 MB" 10 50 "100" 3>&1 1>&2 2>&3)
   if [ $? -ne 0 ] || [ -z "$SIZE_MB_INPUT" ]; then
     SIZE_MB=100
@@ -399,30 +418,24 @@ for file in "$IN"/*; do
   FPS_VAL=$([ "$FPS" = "ori" ] && echo 30 || echo $FPS)
 
   if [ "$MODE" = "2" ]; then
-    # ==========================================================
-    # MODE SIZE TARGET DENGAN ITERASI KOREKSI OTOMATIS
-    # Safety awal 1.05 -> cenderung lebih dulu
-    # HASIL AKHIR: ukuran >= target DAN selisih lebih ≤ 0.5 MB
-    # ==========================================================
     echo ""
     echo "==============================================" >&2
     echo "📹 SEDANG MEMERIKSA INFORMASI VIDEO" >&2
     echo "   File: $name" >&2
     echo "   Mengambil durasi untuk perhitungan ukuran target..." >&2
-    echo "   Jika metadata tidak tersedia, proses bisa memakan waktu lama." >&2
     echo "   Harap tunggu..." >&2
     echo "==============================================" >&2
     
     duration=$(get_duration "$file")
     if [[ -z "$duration" || "$duration" = "0" ]]; then
-      whiptail --msgbox "❌ ERROR: durasi tidak terbaca untuk file $name (ffprobe & mediainfo & decode gagal)" 12 55
+      whiptail --msgbox "❌ ERROR: durasi tidak terbaca untuk file $name" 12 55
       continue
     fi
 
     target_bytes=$(echo "$SIZE_MB * 1024 * 1024" | bc -l)
     audio_kbps=128
     audio_bytes=$(echo "$audio_kbps * 1000 * $duration / 8" | bc -l)
-    safety=1.05   # lebih dulu
+    safety=1.05
 
     max_iter=5
     iter=1
@@ -454,11 +467,9 @@ for file in "$IN"/*; do
       echo "   Menggunakan bitrate video: ${vbit} kbps" >&2
       echo "   Safety factor: $safety" >&2
       echo "   Memulai two-pass encoding..." >&2
-      echo "   Membutuhkan waktu sedikit lama..." >&2
       echo "   Mohon tunggu...." >&2
       echo "--------------------------------------------------" >&2
       
-      # Two-pass dengan stdin ditutup
       ffmpeg -y -loglevel error -i "$file" -r "$FPS_VAL" $SCALE \
         -c:v libx264 -b:v ${vbit}k -pass 1 -an -f null /dev/null < /dev/null
       
@@ -509,7 +520,7 @@ for file in "$IN"/*; do
     
     if [ "$converged" = false ]; then
       echo "   ⚠ Mencapai batas iterasi ($max_iter). Ukuran akhir: ${actual_size_mb} MB (target ${SIZE_MB} MB)" >&2
-      whiptail --msgbox "⚠ Konversi selesai dengan ukuran ${actual_size_mb} MB (target ${SIZE_MB} MB)\nSelisih lebih: $(echo "$actual_size_mb - $SIZE_MB" | bc -l) MB (melebihi toleransi 0.5 MB atau masih kurang)." 12 60
+      whiptail --msgbox "⚠ Konversi selesai dengan ukuran ${actual_size_mb} MB (target ${SIZE_MB} MB)\nSelisih lebih: $(echo "$actual_size_mb - $SIZE_MB" | bc -l) MB" 12 55
     fi
 
   else
