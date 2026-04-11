@@ -110,25 +110,25 @@ A Termux-based video conversion tool with Whiptail UI, equipped with hardware de
 
 ⚙️ Full Features
 
-· ✅ Auto install dependencies (ffmpeg, ffprobe, bc, whiptail, mediainfo) — done by the main script on first run
-· ✅ Device spec detection (RAM, CPU cores) → classification LOW / MEDIUM / HIGH
-  · LOW → Limited (cannot convert 2K and 4K)
-  · MEDIUM → Warning (recommended max 1080p, FPS 30)
-  · HIGH → Normal
-· ✅ Handle libbluray.so.3 library error (auto reinstall if needed)
-· ✅ Conversion modes:
-  · CRF Quality (input CRF value, default 23, range 0–51)
-  · Size Target (input target size in MB, with auto correction iteration)
-· ✅ Size Target iteration:
-  · Initial safety factor 1.05 (tends to overshoot target)
-  · Max 5 iterations
-  · Overshoot tolerance ≤ 0.5 MB
-  · Final result must not be below target
-· ✅ FPS options (24, 30, 60, original)
-· ✅ Resolution options (360p, 480p, 720p, 1080p, 2K, 4K, original)
-· ✅ Batch processing (all files in input folder will be processed)
-· ✅ Auto output to folder /sdcard/irh_vconvert/output
-· ✅ Video duration handling with 3 methods (ffprobe, mediainfo, full decode)
+- ✅ Auto install dependencies (ffmpeg, ffprobe, bc, whiptail, mediainfo) — done by the main script on first run
+- ✅ Device spec detection (RAM, CPU cores) → classification LOW / MEDIUM / HIGH
+  - LOW → Limited (cannot convert 2K and 4K)
+  - MEDIUM → Warning (recommended max 1080p, FPS 30)
+  - HIGH → Normal
+- ✅ Handle libbluray.so.3 library error (auto reinstall if needed)
+- ✅ Conversion modes:
+  - CRF Quality (input CRF value, default 23, range 0–51)
+  - Size Target (input target size in MB, with auto correction iteration)
+- ✅ Size Target iteration:
+  - Initial safety factor 1.05 (tends to overshoot target)
+  - Max 5 iterations
+  - Overshoot tolerance ≤ 0.5 MB
+  - Final result must not be below target
+- ✅ FPS options (24, 30, 60, original)
+- ✅ Resolution options (360p, 480p, 720p, 1080p, 2K, 4K, original)
+- ✅ Batch processing (all files in input folder will be processed)
+- ✅ Auto output to folder ```/sdcard/irh_vconvert/output```
+- ✅ Video duration handling with 3 methods (ffprobe, mediainfo, full decode)
 
 📁 Folder Structure
 
