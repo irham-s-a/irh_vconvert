@@ -139,38 +139,86 @@ CRF_DEFAULT=23
 # =========================
 get_duration() {
   local file="$1"
+  local cache_dir="/sdcard/irh_vconvert/.duration_cache"
+  local file_hash=$(echo -n "$file" | md5sum | cut -d' ' -f1)
+  local cache_file="$cache_dir/$file_hash.cache"
+  
+  mkdir -p "$cache_dir"
+  
+  # Check cache first
+  if [ -f "$cache_file" ]; then
+    local cached_dur=$(cat "$cache_file")
+    echo "$cached_dur"
+    return 0
+  fi
+  
   local dur
-
-  # Metode 1: ffprobe
+  
+  # Metode 1: ffprobe (standard)
   dur=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$file" 2>/dev/null)
   if [[ -n "$dur" && "$dur" != "N/A" && "$dur" =~ ^[0-9]+\.?[0-9]*$ ]]; then
+    echo "$dur" > "$cache_file"
     echo "$dur"
     return 0
   fi
-
-  # Metode 2: mediainfo
+  
+  # Metode 2: ffprobe (JSON format)
+  dur=$(ffprobe -v error -select_streams v:0 -show_entries stream=duration -of default=noprint_wrappers=1:nokey=1 "$file" 2>/dev/null)
+  if [[ -n "$dur" && "$dur" =~ ^[0-9]+\.?[0-9]*$ ]]; then
+    echo "$dur" > "$cache_file"
+    echo "$dur"
+    return 0
+  fi
+  
+  # Metode 3: mediainfo
   if command -v mediainfo >/dev/null 2>&1; then
     dur_ms=$(mediainfo --Inform="General;%Duration%" "$file" 2>/dev/null)
     if [[ -n "$dur_ms" && "$dur_ms" =~ ^[0-9]+$ ]]; then
       dur=$(echo "scale=3; $dur_ms / 1000" | bc -l 2>/dev/null)
       if [[ -n "$dur" && "$dur" != "0" ]]; then
+        echo "$dur" > "$cache_file"
         echo "$dur"
         return 0
       fi
     fi
   fi
-
-  # Metode 3: decode penuh (lambat) dengan notifikasi di CLI (stderr), stdin ditutup
+  
+  # Metode 4: Frame counting (FASTER THAN FULL DECODE)
   echo "" >&2
   echo "==============================================" >&2
-  echo "⏳ MEMBACA DURASI FILE (DECODE)" >&2
+  echo "⏳ MEMBACA DURASI (FRAME COUNTING)" >&2
   echo "   File: $(basename "$file")" >&2
-  echo "   Proses ini lambat, harap tunggu..." >&2
-  echo "   Metode decode digunakan karena metadata durasi" >&2
-  echo "   tidak tersedia (umum pada video hasil editing HP)." >&2
+  echo "   Menggunakan metode frame counting..." >&2
+  echo "   (lebih cepat dari full decode)" >&2
   echo "==============================================" >&2
   
   local tmp_log=$(mktemp)
+  ffmpeg -i "$file" -f null - < /dev/null 2> "$tmp_log"
+  local frames=$(grep -oP 'frame=\s*\K[0-9]+' "$tmp_log" | tail -n1)
+  rm -f "$tmp_log"
+  
+  if [[ -n "$frames" && "$frames" =~ ^[0-9]+$ ]]; then
+    # Get FPS from ffprobe
+    local fps=$(ffprobe -v error -select_streams v:0 -show_entries stream=r_frame_rate -of default=noprint_wrappers=1:nokey=1 "$file" 2>/dev/null)
+    if [[ -n "$fps" ]]; then
+      fps=$(echo "scale=2; $fps" | bc -l 2>/dev/null || echo "30")
+    else
+      fps="30"
+    fi
+    
+    dur=$(echo "scale=3; $frames / $fps" | bc -l 2>/dev/null)
+    if [[ -n "$dur" ]]; then
+      echo "   ✓ Durasi terbaca: ${dur} detik (dari $frames frame @ ${fps} fps)" >&2
+      echo "==============================================" >&2
+      echo "$dur" > "$cache_file"
+      echo "$dur"
+      return 0
+    fi
+  fi
+  
+  # Metode 5: Full decode (ULTIMATE FALLBACK)
+  echo "   Frame counting gagal, fallback ke full decode..." >&2
+  tmp_log=$(mktemp)
   ffmpeg -i "$file" -f null - < /dev/null 2> "$tmp_log"
   dur=$(grep -oP 'time=\K[0-9:.]+' "$tmp_log" | tail -n1)
   rm -f "$tmp_log"
@@ -178,18 +226,18 @@ get_duration() {
   if [[ -n "$dur" ]]; then
     IFS=: read -r h m s <<< "$dur"
     s=${s%.*}
-    echo "   ✓ Durasi terbaca: $dur detik" >&2
+    dur=$((10#$h * 3600 + 10#$m * 60 + 10#$s))
+    echo "   ✓ Durasi terbaca: $dur detik (full decode)" >&2
     echo "==============================================" >&2
-    echo "$((10#$h * 3600 + 10#$m * 60 + 10#$s))"
+    echo "$dur" > "$cache_file"
+    echo "$dur"
     return 0
   fi
-
-  echo "   ✗ Gagal membaca durasi (decode gagal)" >&2
+  
+  echo "   ✗ Gagal membaca durasi" >&2
   echo "==============================================" >&2
-  echo "" >&2
   return 1
 }
-
 # =========================
 # 8. MAIN MENU
 # =========================
