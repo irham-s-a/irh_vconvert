@@ -1,6 +1,6 @@
 #!/data/data/com.termux/files/usr/bin/bash
 
-# Matikan history expansion (biar tanda ! tidak error)
+# Matikan history expansion
 set +H
 
 # =========================
@@ -130,7 +130,7 @@ OUT="$BASE/output"
 mkdir -p "$IN" "$OUT"
 
 # =========================
-# 7.5 CACHE DIRECTORY (Hidden in Termux)
+# 7.5 CACHE DIRECTORY
 # =========================
 CACHE_DIR="$PREFIX/var/lib/irh_vconvert"
 mkdir -p "$CACHE_DIR"
@@ -149,7 +149,6 @@ cleanup_old_cache() {
   fi
 }
 
-# Jalankan cleanup saat startup
 cleanup_old_cache
 
 # =========================
@@ -205,40 +204,17 @@ get_duration() {
     fi
   fi
   
-  # Metode 4: Frame counting (LEBIH CEPAT)
+  # Metode 4: Full decode (FALLBACK TERAKHIR - LAMBAT!)
   echo "" >&2
   echo "==============================================" >&2
-  echo "⏳ MEMBACA DURASI (FRAME COUNTING)" >&2
+  echo "⏳ MEMBACA DURASI VIDEO (SCANNING FILE)" >&2
   echo "   File: $(basename "$file")" >&2
-  echo "   Metode: Frame counting (lebih cepat)" >&2
+  echo "   ⚠️ PERHATIAN: Proses ini LAMBAT (30-60 detik)" >&2
+  echo "   Metadata tidak ditemukan, perlu scan file lengkap..." >&2
+  echo "   Mohon TUNGGU..." >&2
   echo "==============================================" >&2
   
   local tmp_log=$(mktemp)
-  ffmpeg -i "$file" -f null - < /dev/null 2> "$tmp_log"
-  local frames=$(grep -oP 'frame=\s*\K[0-9]+' "$tmp_log" | tail -n1)
-  rm -f "$tmp_log"
-  
-  if [[ -n "$frames" && "$frames" =~ ^[0-9]+$ ]]; then
-    local fps=$(ffprobe -v error -select_streams v:0 -show_entries stream=r_frame_rate -of default=noprint_wrappers=1:nokey=1 "$file" 2>/dev/null)
-    if [[ -n "$fps" ]]; then
-      fps=$(echo "scale=2; $fps" | bc -l 2>/dev/null || echo "30")
-    else
-      fps="30"
-    fi
-    
-    dur=$(echo "scale=3; $frames / $fps" | bc -l 2>/dev/null)
-    if [[ -n "$dur" ]]; then
-      echo "   ✓ Durasi: ${dur} detik (dari $frames frame)" >&2
-      echo "==============================================" >&2
-      echo "$dur" > "$cache_file"
-      echo "$dur"
-      return 0
-    fi
-  fi
-  
-  # Metode 5: Full decode (FALLBACK TERAKHIR)
-  echo "   Fallback: Full decode (lambat)..." >&2
-  tmp_log=$(mktemp)
   ffmpeg -i "$file" -f null - < /dev/null 2> "$tmp_log"
   dur=$(grep -oP 'time=\K[0-9:.]+' "$tmp_log" | tail -n1)
   rm -f "$tmp_log"
@@ -247,7 +223,7 @@ get_duration() {
     IFS=: read -r h m s <<< "$dur"
     s=${s%.*}
     dur=$((10#$h * 3600 + 10#$m * 60 + 10#$s))
-    echo "   ✓ Durasi: $dur detik" >&2
+    echo "   ✓ Durasi terdeteksi: $dur detik" >&2
     echo "==============================================" >&2
     echo "$dur" > "$cache_file"
     echo "$dur"
@@ -372,6 +348,8 @@ fi
 # =========================
 CRF=$CRF_DEFAULT
 SIZE_MB=100
+DURATION_MODE=""
+DURATION_MANUAL=""
 
 if [ "$MODE" = "1" ]; then
   CRF_INPUT=$(whiptail --inputbox "Masukkan nilai CRF (Constant Rate Factor)\n\nSemakin kecil = kualitas lebih baik (18-28)\nDefault 23 (direkomendasikan)" 12 60 "$CRF_DEFAULT" 3>&1 1>&2 2>&3)
@@ -383,6 +361,7 @@ if [ "$MODE" = "1" ]; then
     fi
   fi
 else
+  # MODE SIZE TARGET
   SIZE_MB_INPUT=$(whiptail --inputbox "Masukkan ukuran target (MB)\nDefault 100 MB" 10 50 "100" 3>&1 1>&2 2>&3)
   if [ $? -ne 0 ] || [ -z "$SIZE_MB_INPUT" ]; then
     SIZE_MB=100
@@ -394,6 +373,71 @@ else
       whiptail --msgbox "❌ Input tidak valid. Gunakan default 100 MB." 10 50
       SIZE_MB=100
     fi
+  fi
+  
+  # ===== PILIH MODE DURASI UNTUK SIZE TARGET =====
+  DURATION_MODE=$(whiptail --menu "
+CARA MENENTUKAN DURASI VIDEO?
+
+Pilih salah satu:" 16 60 2 \
+"1" "📥 INPUT MANUAL (Instant, cepat)" \
+"2" "🔍 SCAN OTOMATIS (Akurat, tapi lambat)" \
+3>&1 1>&2 2>&3)
+  
+  [ -z "$DURATION_MODE" ] && continue
+  
+  if [ "$DURATION_MODE" = "1" ]; then
+    # ===== MANUAL INPUT =====
+    whiptail --msgbox "
+⏱️ INPUT MANUAL DURASI
+
+Cara menghitung durasi:
+1. Buka file manager → buka video
+2. Cari durasi video (biasanya di info file)
+   
+Contoh format input:
+- 120    (120 detik)
+- 45.5   (45.5 detik)
+- 2:30   (2 menit 30 detik)
+- 1:30:45 (1 jam 30 menit 45 detik)
+
+⚡ Keuntungan:
+- INSTANT (tidak perlu tunggu)
+- Langsung mulai konversi!
+
+" 20 65
+    
+    DURATION_INPUT=$(whiptail --inputbox "
+Masukkan durasi video
+
+Format: detik / menit:detik / jam:menit:detik
+Contoh: 120 atau 2:30 atau 1:30:45" 12 60 "" 3>&1 1>&2 2>&3)
+    
+    if [ -z "$DURATION_INPUT" ]; then
+      whiptail --msgbox "❌ Durasi tidak boleh kosong!" 10 50
+      continue
+    fi
+    
+    # Konversi format durasi ke detik
+    if [[ "$DURATION_INPUT" =~ ^[0-9]+$ ]]; then
+      # Format: detik saja
+      DURATION_MANUAL="$DURATION_INPUT"
+    elif [[ "$DURATION_INPUT" =~ ^[0-9]+:[0-9]+$ ]]; then
+      # Format: m:ss
+      IFS=: read -r m s <<< "$DURATION_INPUT"
+      DURATION_MANUAL=$((10#$m * 60 + 10#$s))
+    elif [[ "$DURATION_INPUT" =~ ^[0-9]+:[0-9]+:[0-9]+$ ]]; then
+      # Format: h:m:ss
+      IFS=: read -r h m s <<< "$DURATION_INPUT"
+      DURATION_MANUAL=$((10#$h * 3600 + 10#$m * 60 + 10#$s))
+    else
+      whiptail --msgbox "❌ Format durasi tidak valid!\n\nGunakan format:\n- 120 (detik)\n- 2:30 (menit:detik)\n- 1:30:45 (jam:menit:detik)" 12 60
+      continue
+    fi
+    
+    whiptail --msgbox "✅ Durasi diterima: $DURATION_MANUAL detik
+
+Siap untuk konversi!" 10 50
   fi
 fi
 
@@ -418,18 +462,35 @@ for file in "$IN"/*; do
   FPS_VAL=$([ "$FPS" = "ori" ] && echo 30 || echo $FPS)
 
   if [ "$MODE" = "2" ]; then
-    echo ""
-    echo "==============================================" >&2
-    echo "📹 SEDANG MEMERIKSA INFORMASI VIDEO" >&2
-    echo "   File: $name" >&2
-    echo "   Mengambil durasi untuk perhitungan ukuran target..." >&2
-    echo "   Harap tunggu..." >&2
-    echo "==============================================" >&2
+    # ===== MODE SIZE TARGET =====
     
-    duration=$(get_duration "$file")
-    if [[ -z "$duration" || "$duration" = "0" ]]; then
-      whiptail --msgbox "❌ ERROR: durasi tidak terbaca untuk file $name" 12 55
-      continue
+    # Tentukan durasi
+    if [ "$DURATION_MODE" = "1" ]; then
+      # MANUAL INPUT
+      duration=$DURATION_MANUAL
+      echo ""
+      echo "==============================================" >&2
+      echo "✅ MENGGUNAKAN DURASI MANUAL" >&2
+      echo "   File: $name" >&2
+      echo "   Durasi: $duration detik" >&2
+      echo "   (Tidak perlu scan, langsung konversi!)" >&2
+      echo "==============================================" >&2
+    else
+      # SCAN OTOMATIS
+      echo ""
+      echo "==============================================" >&2
+      echo "📹 SEDANG MEMERIKSA INFORMASI VIDEO" >&2
+      echo "   File: $name" >&2
+      echo "   Metode: Scan otomatis (LAMBAT)" >&2
+      echo "   ⏳ Ini mungkin butuh 30-60 detik..." >&2
+      echo "   Mohon tunggu..." >&2
+      echo "==============================================" >&2
+      
+      duration=$(get_duration "$file")
+      if [[ -z "$duration" || "$duration" = "0" ]]; then
+        whiptail --msgbox "❌ ERROR: durasi tidak terbaca untuk file $name\n\nTip: Gunakan opsi INPUT MANUAL di next time!" 12 55
+        continue
+      fi
     fi
 
     target_bytes=$(echo "$SIZE_MB * 1024 * 1024" | bc -l)
