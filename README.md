@@ -40,17 +40,19 @@ Tool convert video berbasis Termux dengan UI Whiptail, dilengkapi deteksi perang
 ### 📲 Cara Install
 
 1. **Clone repository**
-   ```bash
+   ```
    git clone https://github.com/irham-s-a/irh_vconvert.git
    cd irh_vconvert
 ```
 
+
 1. Jalankan install.sh
-   ```bash
+   ```
    bash install.sh
    ```
 2. Pastikan Termux memiliki akses penyimpanan
-   ```bash
+
+   ```
    termux-setup-storage
    ```
 
@@ -58,7 +60,7 @@ Tool convert video berbasis Termux dengan UI Whiptail, dilengkapi deteksi perang
 
 Setelah install, cukup ketik:
 
-```bash
+```
 irh-vconvert
 ```
 
@@ -141,16 +143,16 @@ A Termux-based video conversion tool with Whiptail UI, equipped with hardware de
 📲 Installation
 
 1. Clone repository
-   ```bash
+   ```
    git clone https://github.com/irham-s-a/irh_vconvert.git
    cd irh_vconvert
    ```
 2. Run install.sh
-   ```bash
+   ```
    bash install.sh
    ```
 3. Make sure Termux has storage access
-   ```bash
+   ```
    termux-setup-storage
    ```
 
@@ -158,7 +160,7 @@ A Termux-based video conversion tool with Whiptail UI, equipped with hardware de
 
 After installation, just type:
 
-```bash
+```
 irh-vconvert
 ```
 
