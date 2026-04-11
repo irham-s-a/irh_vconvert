@@ -7,7 +7,7 @@ Tool convert video berbasis Termux dengan UI Whiptail, dilengkapi deteksi perang
 
 ### ⚙️ Fitur Lengkap
 
-- ✅ Auto install dependency (ffmpeg, ffprobe, bc, whiptail, mediainfo)
+- ✅ Auto install dependency (ffmpeg, ffprobe, bc, whiptail, mediainfo) — dilakukan oleh script utama saat pertama kali dijalankan
 - ✅ Deteksi spesifikasi perangkat (RAM, CPU core) → klasifikasi LOW / MEDIUM / HIGH
   - **LOW** → Terbatas (tidak dapat konversi 2K dan 4K)
   - **MEDIUM** → Peringatan (rekomendasi max 1080p, FPS 30)
@@ -45,7 +45,7 @@ Tool convert video berbasis Termux dengan UI Whiptail, dilengkapi deteksi perang
    cd irh_vconvert
 ```
 
-1. Jalankan installer (akan otomatis menginstal dependensi dan membuat alias irh-vconvert)
+1. Jalankan install.sh
    ```bash
    bash install.sh
    ```
@@ -60,12 +60,6 @@ Setelah install, cukup ketik:
 
 ```bash
 irh-vconvert
-```
-
-Atau jika ingin menjalankan langsung dari folder:
-
-```bash
-bash irh_vconvert.sh
 ```
 
 📥 Panduan Penggunaan
@@ -91,7 +85,7 @@ File hasil konversi akan berada di:
 /sdcard/irh_vconvert/output/
 ```
 
-Nama file: conv_(nama asli)
+Nama file: conv_<nama asli>
 
 ⚠️ Catatan
 
@@ -116,7 +110,7 @@ A Termux-based video conversion tool with Whiptail UI, equipped with hardware de
 
 ⚙️ Full Features
 
-· ✅ Auto install dependencies (ffmpeg, ffprobe, bc, whiptail, mediainfo)
+· ✅ Auto install dependencies (ffmpeg, ffprobe, bc, whiptail, mediainfo) — done by the main script on first run
 · ✅ Device spec detection (RAM, CPU cores) → classification LOW / MEDIUM / HIGH
   · LOW → Limited (cannot convert 2K and 4K)
   · MEDIUM → Warning (recommended max 1080p, FPS 30)
@@ -151,7 +145,7 @@ A Termux-based video conversion tool with Whiptail UI, equipped with hardware de
    git clone https://github.com/irham-s-a/irh_vconvert.git
    cd irh_vconvert
    ```
-2. Run installer (automatically installs dependencies and creates alias irh-vconvert)
+2. Run install.sh
    ```bash
    bash install.sh
    ```
@@ -166,12 +160,6 @@ After installation, just type:
 
 ```bash
 irh-vconvert
-```
-
-Or run directly from folder:
-
-```bash
-bash irh_vconvert.sh
 ```
 
 📥 How to Use
@@ -197,7 +185,7 @@ Converted files will be in:
 /sdcard/irh_vconvert/output/
 ```
 
-Filename: conv_(original name)
+Filename: conv_<original name>
 
 ⚠️ Notes
 
