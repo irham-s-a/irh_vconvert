@@ -210,4 +210,4 @@ MIT License
 
 ---
 
-Dibuat oleh / Created by irham-s-a
+Dibuat oleh / Created by [irham-s-a](https://github.com/irham-s-a)
