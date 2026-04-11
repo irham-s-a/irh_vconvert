@@ -45,11 +45,12 @@ Tool convert video berbasis Termux dengan UI Whiptail, dilengkapi deteksi perang
    cd irh_vconvert
 ```
 
-
+```
 1. Jalankan install.sh
    ```
    bash install.sh
-   ```
+  ```
+```
 2. Pastikan Termux memiliki akses penyimpanan
 
    ```
