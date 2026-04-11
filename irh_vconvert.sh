@@ -432,6 +432,24 @@ Contoh: 120 atau 2:30 atau 1:30:45" 12 60 "" 3>&1 1>&2 2>&3)
       continue
     fi
     
+    # ===== CEK JUMLAH FILE UNTUK BATCH - LANGSUNG BLOK =====
+    shopt -s nullglob
+    input_files=("$IN"/*)
+    file_count=${#input_files[@]}
+    
+    if [ $file_count -gt 1 ]; then
+      whiptail --msgbox "❌ MODE MANUAL TIDAK DIIZINKAN UNTUK BANYAK FILE
+
+Folder input berisi $file_count file video.
+
+Mode manual hanya untuk SATU file.
+Silakan pindahkan file lain keluar dari folder input,
+atau gunakan mode SCAN OTOMATIS untuk batch.
+
+Kembali ke pilihan mode durasi." 16 70
+      continue
+    fi
+    
     whiptail --msgbox "✅ Durasi diterima: $DURATION_MANUAL detik
 
 Siap untuk konversi!" 10 50
